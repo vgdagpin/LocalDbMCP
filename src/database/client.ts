@@ -5,13 +5,27 @@ let pool: mssql.ConnectionPool | null = null;
 
 function buildPoolConfig(): mssql.config {
   const db = config.database;
+  
+  // For LocalDB: server format is (localdb)\InstanceName
+  // Extract instance name if present
+  const parts = db.server.match(/\(localdb\)\\(.+)/i);
+  const instanceName = parts ? parts[1] : undefined;
+  
   return {
-    server: db.server,
+    server: "localhost",  // LocalDB accessed via localhost
     database: db.name,
+    authentication: {
+      type: "default",
+      options: {
+        userName: undefined,
+        password: undefined,
+      },
+    },
     options: {
       trustServerCertificate: db.options.trustServerCertificate,
       enableArithAbort: db.options.enableArithAbort,
-      trustedConnection: true, // Windows Integrated Authentication — no username/password
+      encrypt: false,  // LocalDB doesn't support encryption by default
+      instanceName: instanceName,
     },
     connectionTimeout: db.options.connectTimeout,
     requestTimeout: db.options.requestTimeout,

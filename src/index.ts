@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { config } from "./config.js";
-import { closePool } from "./database/client.js";
+import { closePool, getPool } from "./database/client.js";
 import { listTables } from "./tools/listTables.js";
 import { getTableSchema } from "./tools/getSchema.js";
 import { queryTable } from "./tools/queryData.js";
@@ -176,6 +176,18 @@ async function main() {
       `database: ${config.database.name}, ` +
       `patterns: ${config.allowedTablePatterns.join(", ")}`
   );
+
+  // Test database connection
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query("SELECT DB_NAME() as dbName, @@VERSION as version");
+    const dbName = result.recordset[0]?.dbName;
+    console.error(`[LocalDbMCP] ✓ Database connection successful — connected to: ${dbName}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[LocalDbMCP] ✗ Database connection failed: ${message}`);
+    console.error("[LocalDbMCP] Server will start but tools will fail until connection is fixed");
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
