@@ -12,6 +12,7 @@ const DatabaseOptionsSchema = z.object({
 const DatabaseSchema = z.object({
   server: z.string().min(1),
   name: z.string().min(1),
+  odbcDriver: z.string().optional(), // e.g. "ODBC Driver 17 for SQL Server"
   options: DatabaseOptionsSchema.default({}),
 });
 

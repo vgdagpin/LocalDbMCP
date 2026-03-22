@@ -1,31 +1,34 @@
-import * as mssql from "mssql";
+// Use msnodesqlv8 — Microsoft's native Windows driver.
+// It supports (localdb)\InstanceName, Windows Auth, and named pipes natively.
+import type { ConnectionPool, config as MssqlConfig } from "mssql";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mssql = require("mssql/msnodesqlv8") as typeof import("mssql");
+
 import { config } from "../config.js";
 
-let pool: mssql.ConnectionPool | null = null;
+let pool: ConnectionPool | null = null;
 
-function buildPoolConfig(): mssql.config {
+function buildPoolConfig(): MssqlConfig {
   const db = config.database;
-  
-  // For LocalDB: server format is (localdb)\InstanceName
-  // Extract instance name if present
-  const parts = db.server.match(/\(localdb\)\\(.+)/i);
-  const instanceName = parts ? parts[1] : undefined;
-  
-  return {
-    server: "localhost",  // LocalDB accessed via localhost
+
+  // Build an ODBC connection string directly — bypasses mssql's builder which
+  // defaults to 'SQL Server Native Client 11.0' on Windows.
+  // ODBC Driver 17 for SQL Server handles (localdb)\InstanceName natively.
+  const odbcDriver = db.odbcDriver ?? "ODBC Driver 17 for SQL Server";
+  const connectionString =
+    `Driver={${odbcDriver}};` +
+    `Server=${db.server};` +
+    `Database=${db.name};` +
+    `Trusted_Connection=Yes;` +
+    `Encrypt=No;` +
+    `TrustServerCertificate=Yes;`;
+
+  const cfg: MssqlConfig & { connectionString?: string } = {
+    server: db.server,
     database: db.name,
-    authentication: {
-      type: "default",
-      options: {
-        userName: undefined,
-        password: undefined,
-      },
-    },
+    connectionString,  // mssql/msnodesqlv8 reads this; @types/mssql doesn't declare it
     options: {
-      trustServerCertificate: db.options.trustServerCertificate,
       enableArithAbort: db.options.enableArithAbort,
-      encrypt: false,  // LocalDB doesn't support encryption by default
-      instanceName: instanceName,
     },
     connectionTimeout: db.options.connectTimeout,
     requestTimeout: db.options.requestTimeout,
@@ -35,9 +38,10 @@ function buildPoolConfig(): mssql.config {
       idleTimeoutMillis: 60000,
     },
   };
+  return cfg;
 }
 
-export async function getPool(): Promise<mssql.ConnectionPool> {
+export async function getPool(): Promise<ConnectionPool> {
   if (pool && pool.connected) {
     return pool;
   }

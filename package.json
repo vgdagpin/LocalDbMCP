@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.27.1",
+    "msnodesqlv8": "^5.1.5",
     "mssql": "12.2.1",
     "zod": "^3.25.0"
   },
