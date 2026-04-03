@@ -79,9 +79,9 @@ Edit `config.json` (never commit this file — it is gitignored):
 
 | Pattern | Matches |
 |---|---|
-| `pr_*` | `pr_order`, `pr_customer`, `pr_invoice_line`, … |
-| `inv_*` | `inv_item`, `inv_location`, … |
-| `*_archive` | `orders_archive`, `users_archive`, … |
+| `pr_*` | `pr_benefit_def`, `pr_option_def`, … |
+| `cm_*` | `cm_lookup`, `cm_document_def`, … |
+| `*_archive` | `web_archive`, … |
 | `exact_table` | Only `exact_table` |
 | `*` | All tables (not recommended) |
 
@@ -131,8 +131,8 @@ Example response:
 ```json
 {
   "tables": [
-    { "schema": "dbo", "name": "pr_order", "fullName": "dbo.pr_order" },
-    { "schema": "dbo", "name": "pr_customer", "fullName": "dbo.pr_customer" }
+    { "schema": "dbo", "name": "pr_benefit_def", "fullName": "dbo.pr_benefit_def" },
+    { "schema": "dbo", "name": "pr_option_def", "fullName": "dbo.pr_option_def" }
   ],
   "totalCount": 2
 }
@@ -145,7 +145,7 @@ Returns column definitions for a single allowed table.
 
 **Input:**
 ```json
-{ "tableName": "pr_order" }
+{ "tableName": "pr_benefit_def" }
 ```
 
 **Response includes:** column name, data type, max length, nullability, default value.
@@ -158,12 +158,12 @@ Executes a read-only SELECT with optional filters, ordering, and pagination.
 **Input:**
 ```json
 {
-  "tableName": "pr_order",
+  "tableName": "pr_benefit_def",
   "filters": [
-    { "column": "status", "operator": "=", "value": "open" }
+    { "column": "PlanYear", "operator": "=", "value": "2026" }
   ],
   "orderBy": [
-    { "column": "created_at", "direction": "DESC" }
+    { "column": "SortOrder", "direction": "ASC" }
   ],
   "limit": 50,
   "offset": 0
@@ -176,87 +176,50 @@ Executes a read-only SELECT with optional filters, ordering, and pagination.
 
 ---
 
-## Connect to GitHub Copilot in VS Code
+## Setup with GitHub Copilot CLI
 
-Create a file at `.vscode/mcp.json` in your workspace (or any project that should use this server):
+To use this MCP server with the **GitHub Copilot CLI** (`copilot`), you need to configure it in the user-level MCP configuration file.
 
+Create or edit this file:
+```
+%USERPROFILE%\.copilot\mcp-config.json
+```
+
+On Windows, this is typically:
+```
+C:\Users\YourUsername\.copilot\mcp-config.json
+```
+
+Add your MCP server configuration:
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "local-db-mcp": {
       "type": "stdio",
-      "command": "node",
-      "args": ["C:\\full\\path\\to\\LocalDbMCP\\dist\\index.js"],
-      "cwd": "C:\\full\\path\\to\\LocalDbMCP"
+      "command": "pwsh",
+      "tools": [
+        "*"
+      ],
+      "args": [
+        "-File",
+        "C:\\TeamCity\\Git\\vgdagpin\\LocalDbMCP\\mcp-server.ps1",
+        "-Action",
+        "start"
+      ]
     }
   }
 }
+
 ```
 
-Replace `C:\\full\\path\\to\\LocalDbMCP` with the actual path to this project. The `cwd` must point to the directory containing `config.json`.
+**After saving the config:**
+- Restart your terminal session
+- Run `copilot` commands as usual
 
-**Using a workspace-relative path:**
-```json
-{
-  "servers": {
-    "local-db-mcp": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["${workspaceFolder}/../LocalDbMCP/dist/index.js"],
-      "cwd": "${workspaceFolder}/../LocalDbMCP"
-    }
-  }
-}
-```
-
-After saving, reload the VS Code window (`Ctrl+Shift+P` → **Developer: Reload Window**).
-
-Open **GitHub Copilot Chat** and try:
-> "List my tables"
-> "Show me the schema for pr_order"
-> "Find all open orders from the pr_order table"
-
----
-
-## Connect to GitHub Copilot in Visual Studio 2022
-
-Visual Studio 2022 **17.13 or later** with the GitHub Copilot extension supports MCP servers.
-
-### Option A — Via Visual Studio settings UI
-
-1. Go to **Tools → Options → GitHub Copilot → MCP Servers**
-2. Click **Add** and enter:
-   - **Name**: `local-db-mcp`
-   - **Command**: `node`
-   - **Arguments**: `C:\full\path\to\LocalDbMCP\dist\index.js`
-   - **Working Directory**: `C:\full\path\to\LocalDbMCP`
-3. Click **OK** and restart Visual Studio.
-
-### Option B — Via global MCP config file
-
-Open or create this file (substitute your VS version number):
-```
-%APPDATA%\Microsoft\VisualStudio\<version>\Extensions\GitHub.Copilot\mcp.json
-```
-
-Common paths:
-- VS 2022 17.x: `%APPDATA%\Microsoft\VisualStudio\17.0_<hash>\Extensions\GitHub.Copilot\mcp.json`
-
-Contents:
-```json
-{
-  "servers": {
-    "local-db-mcp": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["C:\\full\\path\\to\\LocalDbMCP\\dist\\index.js"],
-      "cwd": "C:\\full\\path\\to\\LocalDbMCP"
-    }
-  }
-}
-```
-
-Restart Visual Studio after saving. The tools will be available in the **GitHub Copilot Chat** panel.
+The Copilot CLI will automatically connect to your MCP server and make the database tools available. You can then ask questions like:
+> "What tables are available in my database?"  
+> "Show me the schema for pr_order"  
+> "Query the pr_customer table for active customers"
 
 ---
 
