@@ -4,11 +4,22 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { appendFileSync } from "fs";
 import { config } from "./config.js";
 import { closePool, getPool } from "./database/client.js";
 import { listTables } from "./tools/listTables.js";
 import { getTableSchema } from "./tools/getSchema.js";
 import { queryTable } from "./tools/queryData.js";
+
+function logCall(tool: string): void {
+  const line = `${new Date().toISOString()} | ${tool}\n`;
+  process.stderr.write(`[LocalDbMCP] call ${line}`);
+  try {
+    appendFileSync("calls.log", line);
+  } catch {
+    // non-fatal
+  }
+}
 
 const server = new Server(
   {
@@ -120,6 +131,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  logCall(name);
 
   try {
     switch (name) {
