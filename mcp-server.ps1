@@ -18,6 +18,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Normalize array params: split on commas in case values were passed as a
+# single comma-separated string (required for pwsh -File / JSON args mode)
+$AllowedTablePatterns  = $AllowedTablePatterns  | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' }
+$ExcludedTablePatterns = $ExcludedTablePatterns | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' }
+
 function Write-Status {
     param([string]$Message, [string]$Type = "Info")
     $color = switch ($Type) {
