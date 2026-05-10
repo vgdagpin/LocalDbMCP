@@ -1,4 +1,4 @@
-# LocalDbMCP — Copilot Instructions
+# BDADbMCP — Copilot Instructions
 
 A read-only MCP (Model Context Protocol) server that exposes SQL Server LocalDB tables to AI assistants. Windows-only — uses Windows Authentication via the `msnodesqlv8` native driver.
 

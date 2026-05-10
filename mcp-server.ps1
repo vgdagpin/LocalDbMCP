@@ -1,5 +1,5 @@
-# Advocate BenefitConnect MCP Server Helper
-# Manages the Model Context Protocol local database server connection
+# BDADbMCP Server Helper
+# Manages the Model Context Protocol SQL Server MCP server
 
 param(
     [Parameter(Mandatory=$false)]
@@ -152,7 +152,7 @@ function Test-LocalMCPInstalled {
             }
             else {
                 Write-Status "⚠ config.json not found. Copy from config.example.json" "Warning"
-                Write-Status "  Run in LocalDbMCP directory: copy config.example.json config.json" "Warning"
+                Write-Status "  Run in BDADbMCP directory: copy config.example.json config.json" "Warning"
                 Write-Status "  Or pass -AllowedTablePatterns to skip config.json entirely" "Warning"
                 return $false
             }
@@ -160,7 +160,7 @@ function Test-LocalMCPInstalled {
         }
         else {
             Write-Status "⚠ dist\index.js not found. Project needs to be built." "Warning"
-            Write-Status "  Run in LocalDbMCP directory: npm install && npm run build" "Warning"
+            Write-Status "  Run in BDADbMCP directory: npm install && npm run build" "Warning"
             return $false
         }
     }
@@ -199,22 +199,15 @@ function Show-Configuration {
     $configPath = Join-Path $PSScriptRoot "config.json"
     
     if (Test-Path $configPath) {
-        $config = Get-Content $configPath -Raw | ConvertFrom-Json
-        $server = $config.mcpServers.'advocate-benefitconnect-db'
-        
         Write-Host ""
-        Write-Host "Server Name: advocate-benefitconnect-db" -ForegroundColor White
-        Write-Host "Command: $($server.command) $($server.args -join ' ')" -ForegroundColor Gray
-        Write-Host "Status: $(if ($server.disabled) { 'Disabled' } else { 'Enabled' })" -ForegroundColor $(if ($server.disabled) { 'Red' } else { 'Green' })
+        Get-Content $configPath | Write-Host -ForegroundColor Gray
         Write-Host ""
-        Write-Host "Allowed Operations:" -ForegroundColor White
-        $server.alwaysAllow | ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray }
-        Write-Host ""
-        
-        Write-Status "Config file location: $configPath" "Info"
+        Write-Status "Config file: $configPath" "Info"
     }
     else {
-        Write-Status "Configuration file not found at: $configPath" "Error"
+        Write-Status "config.json not found at: $configPath" "Warning"
+        Write-Status "  Copy from: $(Join-Path $PSScriptRoot 'config.example.json')" "Warning"
+        Write-Status "  Or pass all config via CLI params (-ConnectionString, -AllowedTablePatterns)" "Warning"
     }
 }
 
@@ -225,7 +218,7 @@ function Start-MCPServer {
         [string[]]$ExcludedTablePatterns = @()
     )
     
-    Write-Status "Starting Local MCP Server for Advocate BenefitConnect..." "Info"
+    Write-Status "Starting MCP server..." "Info"
     
     $mcpPath = $PSScriptRoot
     $distPath = Join-Path $mcpPath "dist\index.js"
@@ -282,7 +275,7 @@ function Start-MCPServer {
 # Main execution
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  Advocate BenefitConnect - MCP Database Server Helper    " -ForegroundColor Cyan
+Write-Host "         BDADbMCP - SQL Server MCP Helper               " -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
@@ -316,7 +309,7 @@ switch ($Action) {
             
             Write-Host ""
             if ($mcpOk) {
-                Write-Status "✓ LocalDbMCP is fully operational!" "Success"
+                Write-Status "✓ BDADbMCP is fully operational!" "Success"
                 Write-Host ""
                 Write-Host "To start the MCP server for Copilot, run:" -ForegroundColor Yellow
                 Write-Host "  .\mcp-server.ps1 -Action start" -ForegroundColor White
@@ -337,21 +330,6 @@ switch ($Action) {
     
     "config" {
         Show-Configuration
-        
-        Write-Host ""
-        Write-Status "LocalDbMCP Configuration:" "Info"
-        $configPath = Join-Path $PSScriptRoot "config.json"
-        
-        if (Test-Path $configPath) {
-            Write-Host ""
-            Get-Content $configPath | Write-Host -ForegroundColor Gray
-            Write-Host ""
-            Write-Status "Config file: $configPath" "Info"
-        }
-        else {
-            Write-Status "⚠ LocalDbMCP config.json not found" "Warning"
-            Write-Status "  Copy from: $(Join-Path $PSScriptRoot 'config.example.json')" "Warning"
-        }
     }
 }
 

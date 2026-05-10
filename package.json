@@ -1,5 +1,5 @@
 {
-  "name": "local-db-mcp",
+  "name": "bda-db-mcp",
   "version": "1.0.0",
   "description": "MCP server for read-only SQL Server LocalDB access with table pattern allowlist",
   "main": "dist/index.js",

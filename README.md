@@ -1,4 +1,4 @@
-# LocalDbMCP
+# BDADbMCP
 
 A read-only MCP (Model Context Protocol) server that connects to a SQL Server database and exposes only tables matching configurable name patterns. Supports both **SQL Server LocalDB** (Windows Auth) and **Azure SQL** (AAD Interactive). Use it with GitHub Copilot in VS Code or Visual Studio 2022 to query your local or cloud database through natural language.
 
@@ -205,8 +205,8 @@ npm start
 
 You should see on stderr:
 ```
-[LocalDbMCP] Starting — server: (localdb)\MSSQLLocalDB, database: YourDb, patterns: pr_*
-[LocalDbMCP] MCP server running on stdio
+[BDADbMCP] Starting — server: (localdb)\MSSQLLocalDB, database: YourDb, patterns: pr_*
+[BDADbMCP] MCP server running on stdio
 ```
 
 Press `Ctrl+C` to stop.
@@ -289,12 +289,12 @@ C:\Users\YourUsername\.copilot\mcp-config.json
 ```json
 {
   "mcpServers": {
-    "local-db-mcp": {
+    "bda-db-mcp": {
       "type": "stdio",
       "command": "pwsh",
       "tools": ["*"],
       "args": [
-        "-File", "C:\\path\\to\\LocalDbMCP\\mcp-server.ps1",
+        "-File", "C:\\path\\to\\BDADbMCP\\mcp-server.ps1",
         "-Action", "start",
         "-ConnectionString", "Data Source=(localdb)\\mssqllocaldb;Initial Catalog=YourDb;Integrated Security=SSPI;",
         "-AllowedTablePatterns", "pr_*", "cm_*", "job_def"
@@ -308,12 +308,12 @@ C:\Users\YourUsername\.copilot\mcp-config.json
 ```json
 {
   "mcpServers": {
-    "local-db-mcp": {
+    "bda-db-mcp": {
       "type": "stdio",
       "command": "pwsh",
       "tools": ["*"],
       "args": [
-        "-File", "C:\\path\\to\\LocalDbMCP\\mcp-server.ps1",
+        "-File", "C:\\path\\to\\BDADbMCP\\mcp-server.ps1",
         "-Action", "start",
         "-ConnectionString", "Data Source=yourserver.database.windows.net;Initial Catalog=YourDb;Authentication=Active Directory Interactive;Encrypt=True;",
         "-AllowedTablePatterns", "pr_*", "cm_*",

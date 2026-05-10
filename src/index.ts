@@ -13,7 +13,7 @@ import { queryTable } from "./tools/queryData.js";
 
 function logCall(tool: string): void {
   const line = `${new Date().toISOString()} | ${tool}\n`;
-  process.stderr.write(`[LocalDbMCP] call ${line}`);
+  process.stderr.write(`[BDADbMCP] call ${line}`);
   try {
     appendFileSync("calls.log", line);
   } catch {
@@ -23,7 +23,7 @@ function logCall(tool: string): void {
 
 const server = new Server(
   {
-    name: "local-db-mcp",
+    name: "bda-db-mcp",
     version: "1.0.0",
   },
   {
@@ -191,13 +191,13 @@ async function main() {
     const server = serverMatch?.[1] ?? "(unknown)";
     const database = dbMatch?.[1] ?? "(unknown)";
     console.error(
-      `[LocalDbMCP] Starting — server: ${server}, ` +
+      `[BDADbMCP] Starting — server: ${server}, ` +
         `database: ${database}, ` +
         `patterns: ${config.allowedTablePatterns.join(", ")}`
     );
   } else {
     console.error(
-      `[LocalDbMCP] Starting — server: ${config.database!.server}, ` +
+      `[BDADbMCP] Starting — server: ${config.database!.server}, ` +
         `database: ${config.database!.name}, ` +
         `patterns: ${config.allowedTablePatterns.join(", ")}`
     );
@@ -208,19 +208,19 @@ async function main() {
     const pool = await getPool();
     const result = await pool.request().query("SELECT DB_NAME() as dbName, @@VERSION as version");
     const dbName = result.recordset[0]?.dbName;
-    console.error(`[LocalDbMCP] ✓ Database connection successful — connected to: ${dbName}`);
+    console.error(`[BDADbMCP] ✓ Database connection successful — connected to: ${dbName}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[LocalDbMCP] ✗ Database connection failed: ${message}`);
-    console.error("[LocalDbMCP] Server will start but tools will fail until connection is fixed");
+    console.error(`[BDADbMCP] ✗ Database connection failed: ${message}`);
+    console.error("[BDADbMCP] Server will start but tools will fail until connection is fixed");
   }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[LocalDbMCP] MCP server running on stdio");
+  console.error("[BDADbMCP] MCP server running on stdio");
 }
 
 main().catch((error) => {
-  console.error("[LocalDbMCP] Fatal error:", error);
+  console.error("[BDADbMCP] Fatal error:", error);
   process.exit(1);
 });
