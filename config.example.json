@@ -1,14 +1,12 @@
 {
-  "database": {
-    "server": "(localdb)\\MSSQLLocalDB",
-    "name": "YourDatabaseName",
-    "options": {
-      "trustServerCertificate": true,
-      "enableArithAbort": true,
-      "connectTimeout": 30000,
-      "requestTimeout": 30000
-    }
-  },
+  "_note": "allowedTablePatterns is the only required field. Everything else can be supplied via mcp-server.ps1 CLI params (-ConnectionString, -AllowedTablePatterns, -ExcludedTablePatterns) — making this file optional when all params are passed via CLI.",
+
   "allowedTablePatterns": ["pr_*", "inv_*"],
-  "excludedTablePatterns": ["pr_sensitive_*"]
+
+  "__optional_fields": {
+    "excludedTablePatterns": ["pr_sensitive_*"],
+    "requestTimeout": 30000,
+    "odbcDriver": "ODBC Driver 17 for SQL Server",
+    "connectionString": "Data Source=(localdb)\\mssqllocaldb;Initial Catalog=YourDatabaseName;Integrated Security=SSPI;"
+  }
 }

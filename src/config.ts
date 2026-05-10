@@ -17,14 +17,26 @@ const DatabaseSchema = z.object({
 });
 
 const ConfigSchema = z.object({
-  database: DatabaseSchema,
+  // ADO.NET format connection string — takes priority over database.* when present.
+  // Also overridden by the MCP_CONNECTION_STRING environment variable.
+  connectionString: z.string().optional(),
+  // Override the ODBC driver for all connection modes (default: ODBC Driver 17 for SQL Server)
+  odbcDriver: z.string().optional(),
+  // Query execution timeout in ms when using connectionString (default: 30000)
+  requestTimeout: z.number().int().positive().optional(),
+  // Structured connection settings — used when connectionString is absent
+  database: DatabaseSchema.optional(),
+  // Table access control — can also be set via MCP_ALLOWED_PATTERNS env var (comma-separated)
   allowedTablePatterns: z
     .array(z.string().min(1))
-    .min(1, "allowedTablePatterns must have at least one pattern"),
+    .optional(),
+  // Extra deny-list — can also be set via MCP_EXCLUDED_PATTERNS env var (comma-separated)
   excludedTablePatterns: z.array(z.string().min(1)).optional().default([]),
 });
 
-export type Config = z.infer<typeof ConfigSchema>;
+export type Config = z.infer<typeof ConfigSchema> & {
+  allowedTablePatterns: string[];
+};
 
 function loadConfig(): Config {
   // Search for config.json relative to cwd (dev) or next to dist/ (deployed)
@@ -33,24 +45,16 @@ function loadConfig(): Config {
     join(__dirname, "..", "config.json"),
   ];
 
-  let raw: unknown;
-  let loaded = false;
+  let raw: unknown = {};
 
   for (const candidate of candidates) {
     try {
       const content = readFileSync(candidate, "utf-8");
       raw = JSON.parse(content);
-      loaded = true;
       break;
     } catch {
-      // try next candidate
+      // try next candidate; if none found, raw stays {} and env vars must supply everything
     }
-  }
-
-  if (!loaded) {
-    throw new Error(
-      "config.json not found. Copy config.example.json to config.json and fill in your database details."
-    );
   }
 
   const result = ConfigSchema.safeParse(raw);
@@ -61,7 +65,45 @@ function loadConfig(): Config {
     throw new Error(`config.json is invalid:\n${issues}`);
   }
 
-  return result.data;
+  const data = result.data;
+
+  // Validate that at least one connection source is available
+  const hasEnvCs = !!process.env.MCP_CONNECTION_STRING;
+  if (!hasEnvCs && !data.connectionString && !data.database) {
+    throw new Error(
+      "No database connection configured. " +
+        "Provide either 'connectionString' or 'database' in config.json, " +
+        "or pass -ConnectionString to mcp-server.ps1 (sets MCP_CONNECTION_STRING env var)."
+    );
+  }
+
+  // Apply MCP_ALLOWED_PATTERNS env var (comma-separated list overrides config)
+  const envAllowed = process.env.MCP_ALLOWED_PATTERNS;
+  if (envAllowed) {
+    data.allowedTablePatterns = envAllowed
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+
+  // Apply MCP_EXCLUDED_PATTERNS env var (comma-separated list overrides config)
+  const envExcluded = process.env.MCP_EXCLUDED_PATTERNS;
+  if (envExcluded) {
+    data.excludedTablePatterns = envExcluded
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+
+  // Validate that at least one allowed pattern is available after env var merge
+  if (!data.allowedTablePatterns || data.allowedTablePatterns.length === 0) {
+    throw new Error(
+      "No allowedTablePatterns configured. " +
+        "Add 'allowedTablePatterns' to config.json or pass -AllowedTablePatterns to mcp-server.ps1."
+    );
+  }
+
+  return data as Config;
 }
 
 export const config: Config = loadConfig();

@@ -184,11 +184,24 @@ process.on("SIGTERM", async () => {
 
 async function main() {
   // Config is validated at module load time — any errors appear immediately
-  console.error(
-    `[LocalDbMCP] Starting — server: ${config.database.server}, ` +
-      `database: ${config.database.name}, ` +
-      `patterns: ${config.allowedTablePatterns.join(", ")}`
-  );
+  const effectiveCs = process.env.MCP_CONNECTION_STRING ?? config.connectionString;
+  if (effectiveCs) {
+    const serverMatch = effectiveCs.match(/Data Source=([^;]+)/i);
+    const dbMatch = effectiveCs.match(/Initial Catalog=([^;]+)/i);
+    const server = serverMatch?.[1] ?? "(unknown)";
+    const database = dbMatch?.[1] ?? "(unknown)";
+    console.error(
+      `[LocalDbMCP] Starting — server: ${server}, ` +
+        `database: ${database}, ` +
+        `patterns: ${config.allowedTablePatterns.join(", ")}`
+    );
+  } else {
+    console.error(
+      `[LocalDbMCP] Starting — server: ${config.database!.server}, ` +
+        `database: ${config.database!.name}, ` +
+        `patterns: ${config.allowedTablePatterns.join(", ")}`
+    );
+  }
 
   // Test database connection
   try {

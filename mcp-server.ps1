@@ -7,10 +7,13 @@ param(
     [string]$Action = "test",
     
     [Parameter(Mandatory=$false)]
-    [string]$Server = "localhost",
-    
+    [string]$ConnectionString = "",
+
     [Parameter(Mandatory=$false)]
-    [string]$Database = "AdvocateBenefitConnect"
+    [string[]]$AllowedTablePatterns = @(),
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$ExcludedTablePatterns = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,108 +30,109 @@ function Write-Status {
 }
 
 function Test-MCPConnection {
-    Write-Status "Testing MCP server connectivity..."
+    param(
+        [string]$ConnectionString = "",
+        [string[]]$AllowedTablePatterns = @(),
+        [string[]]$ExcludedTablePatterns = @()
+    )
     
-    try {
-        $mcpPath = "C:\TeamCity\Git\vgdagpin\LocalDbMCP"
-        $distPath = Join-Path $mcpPath "dist\index.js"
-        
-        if (-not (Test-Path $distPath)) {
-            Write-Status "✗ MCP server not built" "Error"
-            return $false
-        }
-        
-        # Create MCP protocol request to list tools
-        $initRequest = @{
-            jsonrpc = "2.0"
-            id = 1
-            method = "initialize"
-            params = @{
-                protocolVersion = "2024-11-05"
-                capabilities = @{
-                    roots = @{
-                        listChanged = $false
-                    }
-                }
-                clientInfo = @{
-                    name = "mcp-test-client"
-                    version = "1.0.0"
-                }
-            }
-        } | ConvertTo-Json -Depth 10 -Compress
-        
-        $listToolsRequest = @{
-            jsonrpc = "2.0"
-            id = 2
-            method = "tools/list"
-            params = @{}
-        } | ConvertTo-Json -Depth 10 -Compress
-        
-        # Start MCP server process
-        Push-Location $mcpPath
-        try {
-            $process = Start-Process -FilePath "node" -ArgumentList $distPath `
-                -NoNewWindow -PassThru `
-                -RedirectStandardInput "$env:TEMP\mcp-test-in.json" `
-                -RedirectStandardOutput "$env:TEMP\mcp-test-out.json" `
-                -RedirectStandardError "$env:TEMP\mcp-test-err.json"
-            
-            Start-Sleep -Milliseconds 500
-            
-            # Send initialize request
-            $initRequest | Out-File -FilePath "$env:TEMP\mcp-test-in.json" -Encoding UTF8
-            Start-Sleep -Milliseconds 300
-            
-            # Send tools/list request
-            $listToolsRequest | Out-File -FilePath "$env:TEMP\mcp-test-in.json" -Encoding UTF8 -Append
-            Start-Sleep -Milliseconds 500
-            
-            # Check output
-            if (Test-Path "$env:TEMP\mcp-test-out.json") {
-                $output = Get-Content "$env:TEMP\mcp-test-out.json" -Raw
-                
-                if ($output -match '"method"\s*:\s*"tools/list"' -or $output -match '"list_tables"') {
-                    Write-Status "✓ MCP server responded successfully!" "Success"
-                    
-                    # Try to count tools
-                    $toolCount = ([regex]::Matches($output, '"name"\s*:\s*"(list_tables|query_data|get_schema)"')).Count
-                    if ($toolCount -gt 0) {
-                        Write-Status "✓ MCP server has $toolCount tool(s) available" "Success"
-                    }
-                    
-                    $process.Kill()
-                    return $true
-                }
-            }
-            
-            # Check for errors
-            if (Test-Path "$env:TEMP\mcp-test-err.json") {
-                $errorOutput = Get-Content "$env:TEMP\mcp-test-err.json" -Raw
-                if ($errorOutput) {
-                    Write-Status "⚠ MCP server error: $($errorOutput.Substring(0, [Math]::Min(100, $errorOutput.Length)))" "Warning"
-                }
-            }
-            
-            $process.Kill()
-            Write-Status "✗ MCP server did not respond as expected" "Error"
-            return $false
-        }
-        finally {
-            Pop-Location
-            # Cleanup temp files
-            Remove-Item -Path "$env:TEMP\mcp-test-*.json" -ErrorAction SilentlyContinue
-        }
-    }
-    catch {
-        Write-Status "✗ MCP server test failed: $($_.Exception.Message)" "Error"
+    Write-Status "Testing MCP server database connectivity..." "Info"
+    
+    $mcpPath = $PSScriptRoot
+    $distPath = Join-Path $mcpPath "dist\index.js"
+    
+    if (-not (Test-Path $distPath)) {
+        Write-Status "✗ MCP server not built. Run: npm run build" "Error"
         return $false
+    }
+    
+    if ($ConnectionString) {
+        $env:MCP_CONNECTION_STRING = $ConnectionString
+        Write-Status "Using provided connection string" "Info"
+    }
+    if ($AllowedTablePatterns.Count -gt 0) {
+        $env:MCP_ALLOWED_PATTERNS = $AllowedTablePatterns -join ','
+        Write-Status "Allowed patterns: $($env:MCP_ALLOWED_PATTERNS)" "Info"
+    }
+    if ($ExcludedTablePatterns.Count -gt 0) {
+        $env:MCP_EXCLUDED_PATTERNS = $ExcludedTablePatterns -join ','
+        Write-Status "Excluded patterns: $($env:MCP_EXCLUDED_PATTERNS)" "Info"
+    }
+    
+    $stderrFile = "$env:TEMP\mcp-test-err-$([System.Guid]::NewGuid()).txt"
+    $stdoutFile = "$env:TEMP\mcp-test-out-$([System.Guid]::NewGuid()).txt"
+    
+    Push-Location $mcpPath
+    $process = $null
+    try {
+        $process = Start-Process -FilePath "node" -ArgumentList $distPath `
+            -NoNewWindow -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError  $stderrFile
+        
+        Write-Status "Waiting for database connection (up to 60s for interactive auth)..." "Info"
+        
+        $timeout = 60
+        $elapsed = 0
+        $result  = $null
+        
+        while ($elapsed -lt $timeout -and $null -eq $result) {
+            Start-Sleep -Seconds 2
+            $elapsed += 2
+            
+            if (Test-Path $stderrFile) {
+                $err = Get-Content $stderrFile -Raw -ErrorAction SilentlyContinue
+                if ($err -match [regex]::Escape("✓ Database connection successful")) {
+                    $result = $true
+                    $dbMatch = [regex]::Match($err, "connected to: (.+)")
+                    if ($dbMatch.Success) {
+                        Write-Status "✓ Connected to: $($dbMatch.Groups[1].Value.Trim())" "Success"
+                    } else {
+                        Write-Status "✓ Database connection successful" "Success"
+                    }
+                } elseif ($err -match [regex]::Escape("✗ Database connection failed")) {
+                    $result = $false
+                    $errMatch = [regex]::Match($err, "failed: (.+)")
+                    if ($errMatch.Success) {
+                        Write-Status "✗ $($errMatch.Groups[1].Value.Trim())" "Error"
+                    } else {
+                        Write-Status "✗ Database connection failed" "Error"
+                    }
+                }
+            }
+        }
+        
+        if ($null -eq $result) {
+            Write-Status "✗ Connection timed out after ${timeout}s" "Error"
+            $result = $false
+        }
+        
+        return $result
+    }
+    finally {
+        if ($null -ne $process -and -not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
+        Pop-Location
+        if ($ConnectionString) {
+            Remove-Item Env:\MCP_CONNECTION_STRING -ErrorAction SilentlyContinue
+        }
+        if ($AllowedTablePatterns.Count -gt 0) {
+            Remove-Item Env:\MCP_ALLOWED_PATTERNS -ErrorAction SilentlyContinue
+        }
+        if ($ExcludedTablePatterns.Count -gt 0) {
+            Remove-Item Env:\MCP_EXCLUDED_PATTERNS -ErrorAction SilentlyContinue
+        }
+        Remove-Item -Path $stderrFile, $stdoutFile -ErrorAction SilentlyContinue
     }
 }
 
 function Test-LocalMCPInstalled {
+    param([string[]]$AllowedTablePatterns = @())
+
     Write-Status "Checking Local MCP installation..."
     
-    $mcpPath = "C:\TeamCity\Git\vgdagpin\LocalDbMCP"
+    $mcpPath = $PSScriptRoot
     
     if (Test-Path $mcpPath) {
         Write-Status "✓ Local MCP found at: $mcpPath" "Success"
@@ -138,17 +142,21 @@ function Test-LocalMCPInstalled {
         if (Test-Path $distPath) {
             Write-Status "✓ dist\index.js found (server is built)" "Success"
             
-            # Check for config.json
+            # Check for config.json — optional if patterns are provided via CLI
             $configPath = Join-Path $mcpPath "config.json"
             if (Test-Path $configPath) {
                 Write-Status "✓ config.json found" "Success"
-                return $true
+            }
+            elseif ($AllowedTablePatterns.Count -gt 0) {
+                Write-Status "⚠ config.json not found — using CLI-provided patterns" "Warning"
             }
             else {
                 Write-Status "⚠ config.json not found. Copy from config.example.json" "Warning"
                 Write-Status "  Run in LocalDbMCP directory: copy config.example.json config.json" "Warning"
+                Write-Status "  Or pass -AllowedTablePatterns to skip config.json entirely" "Warning"
                 return $false
             }
+            return $true
         }
         else {
             Write-Status "⚠ dist\index.js not found. Project needs to be built." "Warning"
@@ -211,18 +219,36 @@ function Show-Configuration {
 }
 
 function Start-MCPServer {
+    param(
+        [string]$ConnectionString = "",
+        [string[]]$AllowedTablePatterns = @(),
+        [string[]]$ExcludedTablePatterns = @()
+    )
+    
     Write-Status "Starting Local MCP Server for Advocate BenefitConnect..." "Info"
     
-    $mcpPath = "C:\TeamCity\Git\vgdagpin\LocalDbMCP"
+    $mcpPath = $PSScriptRoot
     $distPath = Join-Path $mcpPath "dist\index.js"
     
     if (Test-Path $distPath) {
+        if ($ConnectionString) {
+            $env:MCP_CONNECTION_STRING = $ConnectionString
+            Write-Status "Using provided connection string" "Info"
+        }
+        if ($AllowedTablePatterns.Count -gt 0) {
+            $env:MCP_ALLOWED_PATTERNS = $AllowedTablePatterns -join ','
+            Write-Status "Allowed patterns: $($env:MCP_ALLOWED_PATTERNS)" "Info"
+        }
+        if ($ExcludedTablePatterns.Count -gt 0) {
+            $env:MCP_EXCLUDED_PATTERNS = $ExcludedTablePatterns -join ','
+            Write-Status "Excluded patterns: $($env:MCP_EXCLUDED_PATTERNS)" "Info"
+        }
         Write-Status "Starting Node.js MCP server..." "Info"
         Write-Status "Working directory: $mcpPath" "Info"
         Write-Status "Entry point: $distPath" "Info"
         Write-Host ""
         
-        # Change to MCP directory (so config.json is found)
+        # Change to MCP directory (so config.json is found if present)
         Push-Location $mcpPath
         
         try {
@@ -230,13 +256,22 @@ function Start-MCPServer {
         }
         finally {
             Pop-Location
+            if ($ConnectionString) {
+                Remove-Item Env:\MCP_CONNECTION_STRING -ErrorAction SilentlyContinue
+            }
+            if ($AllowedTablePatterns.Count -gt 0) {
+                Remove-Item Env:\MCP_ALLOWED_PATTERNS -ErrorAction SilentlyContinue
+            }
+            if ($ExcludedTablePatterns.Count -gt 0) {
+                Remove-Item Env:\MCP_EXCLUDED_PATTERNS -ErrorAction SilentlyContinue
+            }
         }
     }
     else {
         Write-Status "✗ dist\index.js not found. Please build the project first." "Error"
         Write-Status "  Run these commands:" "Warning"
         Write-Host ""
-        Write-Host "  cd C:\TeamCity\Git\vgdagpin\LocalDbMCP" -ForegroundColor Yellow
+        Write-Host "  cd $PSScriptRoot" -ForegroundColor Yellow
         Write-Host "  npm install" -ForegroundColor Yellow
         Write-Host "  npm run build" -ForegroundColor Yellow
         Write-Host ""
@@ -254,13 +289,13 @@ Write-Host ""
 switch ($Action) {
     "start" {
         $nodeOk = Test-NodeInstalled
-        $mcpOk = Test-LocalMCPInstalled
+        $mcpOk = Test-LocalMCPInstalled -AllowedTablePatterns $AllowedTablePatterns
         
         if ($nodeOk -and $mcpOk) {
             Write-Status "Prerequisites met - starting MCP server..." "Info"
             Write-Status "  (Use -Action test to verify MCP protocol connectivity)" "Info"
             Write-Host ""
-            Start-MCPServer
+            Start-MCPServer -ConnectionString $ConnectionString -AllowedTablePatterns $AllowedTablePatterns -ExcludedTablePatterns $ExcludedTablePatterns
         }
         else {
             Write-Status "Cannot start MCP server - prerequisites not met" "Error"
@@ -270,14 +305,14 @@ switch ($Action) {
     
     "test" {
         $nodeOk = Test-NodeInstalled
-        $mcpOk = Test-LocalMCPInstalled
+        $mcpOk = Test-LocalMCPInstalled -AllowedTablePatterns $AllowedTablePatterns
         
         Write-Host ""
         if ($nodeOk -and $mcpOk) {
             Write-Status "✓ Prerequisites met - testing MCP protocol..." "Success"
             Write-Host ""
             
-            $mcpOk = Test-MCPConnection
+            $mcpOk = Test-MCPConnection -ConnectionString $ConnectionString -AllowedTablePatterns $AllowedTablePatterns -ExcludedTablePatterns $ExcludedTablePatterns
             
             Write-Host ""
             if ($mcpOk) {
@@ -290,7 +325,7 @@ switch ($Action) {
             }
             else {
                 Write-Status "✗ MCP protocol test failed - check config.json and database settings" "Error"
-                Write-Status "  Config: C:\TeamCity\Git\vgdagpin\LocalDbMCP\config.json" "Warning"
+                Write-Status "  Config: $(Join-Path $PSScriptRoot 'config.json')" "Warning"
                 exit 1
             }
         }
@@ -305,7 +340,7 @@ switch ($Action) {
         
         Write-Host ""
         Write-Status "LocalDbMCP Configuration:" "Info"
-        $configPath = "C:\TeamCity\Git\vgdagpin\LocalDbMCP\config.json"
+        $configPath = Join-Path $PSScriptRoot "config.json"
         
         if (Test-Path $configPath) {
             Write-Host ""
@@ -315,7 +350,7 @@ switch ($Action) {
         }
         else {
             Write-Status "⚠ LocalDbMCP config.json not found" "Warning"
-            Write-Status "  Copy from: C:\TeamCity\Git\vgdagpin\LocalDbMCP\config.example.json" "Warning"
+            Write-Status "  Copy from: $(Join-Path $PSScriptRoot 'config.example.json')" "Warning"
         }
     }
 }

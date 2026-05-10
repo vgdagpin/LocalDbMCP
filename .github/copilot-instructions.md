@@ -13,9 +13,14 @@ npm run dev          # watch mode — recompiles on file save
 
 There is no test suite. Manual testing: `npm start` and verify the startup banner on stderr, then confirm database connection message.
 
-To test MCP protocol connectivity via PowerShell:
+To test connectivity via PowerShell (LocalDB):
 ```powershell
-.\mcp-server.ps1 -Action test
+.\mcp-server.ps1 -Action test -ConnectionString "Data Source=(localdb)\mssqllocaldb;Initial Catalog=MyDb;Integrated Security=SSPI;"
+```
+
+To test with Azure SQL (will prompt AAD Interactive auth):
+```powershell
+.\mcp-server.ps1 -Action test -ConnectionString "Data Source=yourserver.database.windows.net;Initial Catalog=MyDb;Authentication=Active Directory Interactive;Encrypt=True;TrustServerCertificate=False;"
 ```
 
 ## Architecture
@@ -34,7 +39,31 @@ The server is a single Node.js process that speaks the MCP protocol over **stdio
 3. `src/database/client.ts` — lazy singleton connection pool using `mssql/msnodesqlv8`
 4. `src/database/tableFilter.ts` — glob patterns compiled once at startup into `RegExp[]`
 
-**Config loading** (`src/config.ts`): `config.json` is read and Zod-validated at module load time. Any schema error aborts startup immediately. The file is searched in `cwd` first, then `../` relative to `dist/`.
+**Config loading** (`src/config.ts`): `config.json` is read and Zod-validated at module load time. Any schema error aborts startup immediately. The file is searched in `cwd` first, then `../` relative to `dist/`. At least one connection source must be present: `MCP_CONNECTION_STRING` env var, `config.connectionString`, or `config.database`.
+
+## Connection Modes
+
+Three sources are checked in priority order (highest first):
+
+| Source | How to set |
+|---|---|
+| `MCP_CONNECTION_STRING` env var | `.\mcp-server.ps1 -ConnectionString "..."` injects this |
+| `connectionString` in `config.json` | ADO.NET format string in the file |
+| `database` block in `config.json` | Original structured form (LocalDB + Windows Auth only) |
+
+`connectionString` / `MCP_CONNECTION_STRING` accept **ADO.NET format** strings. The `parseAdoNet()` function in `src/database/client.ts` converts them to ODBC format for `msnodesqlv8`. Key mappings:
+
+| ADO.NET | ODBC |
+|---|---|
+| `Data Source` | `Server` |
+| `Initial Catalog` | `Database` |
+| `Integrated Security=SSPI` | `Trusted_Connection=Yes` |
+| `Authentication=Active Directory Interactive` | `Authentication=ActiveDirectoryInteractive` |
+| `Encrypt=True/False` | `Encrypt=Yes/No` |
+| `TrustServerCertificate=True/False` | `TrustServerCertificate=Yes/No` |
+| `Persist Security Info` | _(ignored)_ |
+
+`requestTimeout` (query execution ms) is not in ADO.NET strings. Override via `requestTimeout` in `config.json`; defaults to 30 000 ms.
 
 ## Key Conventions
 
@@ -76,8 +105,10 @@ return {
 };
 ```
 
-### config.json is gitignored
+### config.json is gitignored — two connection forms
 `config.json` holds local DB credentials and must never be committed. `config.example.json` is the source of truth for the config schema. When adding new config fields, update **both** `config.example.json` (example values) and the Zod schema in `src/config.ts`.
+
+The `database` block is now optional — `connectionString` (ADO.NET string) is the recommended form and supports both LocalDB and Azure SQL. At least one must be present, or `MCP_CONNECTION_STRING` env var must be set.
 
 ### Pattern matching is case-insensitive glob (`*` only)
 `tableFilter.ts` supports only `*` as a wildcard (no `?`, `**`, or brace expansion). Patterns are compiled to `RegExp` once at startup — avoid per-request compilation. Matching applies to the bare table name without schema prefix.
