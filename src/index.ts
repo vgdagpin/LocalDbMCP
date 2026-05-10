@@ -203,17 +203,8 @@ async function main() {
     );
   }
 
-  // Test database connection
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query("SELECT DB_NAME() as dbName, @@VERSION as version");
-    const dbName = result.recordset[0]?.dbName;
-    console.error(`[BDADbMCP] ✓ Database connection successful — connected to: ${dbName}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[BDADbMCP] ✗ Database connection failed: ${message}`);
-    console.error("[BDADbMCP] Server will start but tools will fail until connection is fixed");
-  }
+  // Connection is lazy — pool connects on first tool call, which is when
+  // AAD Interactive auth will prompt (if needed). No eager connect at startup.
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
