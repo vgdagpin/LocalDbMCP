@@ -9,5 +9,6 @@
       "requestTimeout": 30000
     }
   },
-  "allowedTablePatterns": ["pr_*", "inv_*"]
+  "allowedTablePatterns": ["pr_*", "inv_*"],
+  "excludedTablePatterns": ["pr_sensitive_*"]
 }

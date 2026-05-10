@@ -21,6 +21,7 @@ const ConfigSchema = z.object({
   allowedTablePatterns: z
     .array(z.string().min(1))
     .min(1, "allowedTablePatterns must have at least one pattern"),
+  excludedTablePatterns: z.array(z.string().min(1)).optional().default([]),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

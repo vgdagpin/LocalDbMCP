@@ -24,8 +24,8 @@ export async function getTableSchema(tableName: string): Promise<GetSchemaResult
   // Layer 2: check against allowlist before touching the database
   if (!isTableAllowed(tableName)) {
     throw new Error(
-      `Table "${tableName}" is not in the allowed table list. ` +
-        `Check allowedTablePatterns in config.json.`
+      `Table "${tableName}" is not accessible. ` +
+        `Check allowedTablePatterns and excludedTablePatterns in config.json.`
     );
   }
 

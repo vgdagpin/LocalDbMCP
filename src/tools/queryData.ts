@@ -44,8 +44,8 @@ export async function queryTable(rawInput: unknown): Promise<QueryTableResult> {
   // Layer 3: Allowlist check
   if (!isTableAllowed(input.tableName)) {
     throw new Error(
-      `Table "${input.tableName}" is not in the allowed table list. ` +
-        `Check allowedTablePatterns in config.json.`
+      `Table "${input.tableName}" is not accessible. ` +
+        `Check allowedTablePatterns and excludedTablePatterns in config.json.`
     );
   }
 

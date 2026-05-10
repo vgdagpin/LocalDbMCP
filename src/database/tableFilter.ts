@@ -1,7 +1,10 @@
 import { config } from "../config.js";
 
 // Compiled once at startup for performance
-const compiledPatterns: RegExp[] = config.allowedTablePatterns.map(
+const compiledAllowedPatterns: RegExp[] = config.allowedTablePatterns.map(
+  patternToRegex
+);
+const compiledExcludedPatterns: RegExp[] = config.excludedTablePatterns.map(
   patternToRegex
 );
 
@@ -18,11 +21,15 @@ export function patternToRegex(pattern: string): RegExp {
 }
 
 /**
- * Returns true if the given table name matches at least one allowed pattern.
+ * Returns true if the given table name matches at least one allowed pattern
+ * and does not match any excluded pattern.
  * Matching is on the bare table name only (no schema prefix), case-insensitive.
  */
 export function isTableAllowed(tableName: string): boolean {
-  return compiledPatterns.some((re) => re.test(tableName));
+  const isAllowed = compiledAllowedPatterns.some((re) => re.test(tableName));
+  if (!isAllowed) return false;
+  const isExcluded = compiledExcludedPatterns.some((re) => re.test(tableName));
+  return !isExcluded;
 }
 
 /**
